@@ -1,0 +1,105 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account and profile information with role-based access.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["CITIZEN", "RT", "RW", "KADUS", "ADMIN"] },
+        "rt": { "type": "string" },
+        "rw": { "type": "string" },
+        "dusun": { "type": "string" },
+        "nik": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "CitizenData": {
+      "title": "Citizen Data",
+      "description": "Detailed citizen data for demographics and verification.",
+      "type": "object",
+      "properties": {
+        "nik": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "birthPlace": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "gender": { "type": "string" },
+        "occupation": { "type": "string" },
+        "education": { "type": "string" },
+        "familyHead": { "type": "string" },
+        "socialAssistance": { "type": "array" },
+        "economicStatus": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["PENDING", "RT_APPROVED", "RW_APPROVED", "KADUS_APPROVED", "ADMIN_APPROVED", "REJECTED"] },
+        "rejectionNotes": { "type": "string" },
+        "rt": { "type": "string" },
+        "rw": { "type": "string" },
+        "dusun": { "type": "string" },
+        "location": { "type": "object" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Letter": {
+      "title": "Service Letter",
+      "description": "Digital letter requests and their approval status.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["DOMISILI", "USAHA", "TIDAK_MAMPU", "NIKAH", "PINDAH"] },
+        "citizenId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "RT_APPROVED", "RW_APPROVED", "COMPLETED", "REJECTED"] },
+        "purpose": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "rtNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Citizen reports/complaints for various administrative levels.",
+      "type": "object",
+      "properties": {
+        "citizenId": { "type": "string" },
+        "category": { "type": "string", "enum": ["SECURITY", "ENVIRONMENT", "SOCIAL", "INFRASTRUCTURE", "WASTE", "LIGHTING"] },
+        "targetLevel": { "type": "string", "enum": ["RT", "RW", "KADUS", "DESA"] },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "location": { "type": "object" },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+        "response": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "News": {
+      "title": "Village News/Info",
+      "description": "Announcements and news for citizens.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "level": { "type": "string", "enum": ["RT", "RW", "KADUS", "DESA"] },
+        "targetRt": { "type": "string" },
+        "targetRw": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "Global user accounts" },
+    "/citizens/{citizenId}": { "schema": "CitizenData", "description": "Detailed citizen records" },
+    "/letters/{letterId}": { "schema": "Letter", "description": "Administrative letter requests" },
+    "/complaints/{complaintId}": { "schema": "Complaint", "description": "Citizen complaints" },
+    "/news/{newsId}": { "schema": "News", "description": "Announcements and official news" }
+  }
+}

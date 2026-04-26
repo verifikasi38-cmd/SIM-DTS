@@ -1,0 +1,8 @@
+{
+  "name": "SIM-DTS",
+  "description": "Smart Village Integrated Digital Governance Platform - Sistem Informasi Manajemen Data Tarempa Selatan untuk pelayanan desa modern dan transparan.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
