@@ -1,6 +1,18 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+let aiClient: GoogleGenAI | null = null;
+function getAi(): GoogleGenAI {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("GEMINI_API_KEY is missing. Gemini features will not work.");
+      // We return a dummy object or throw. But throwing here might break if the app functions without AI.
+      // E.g., user is just trying to use non-AI features. We will throw and catch below.
+    }
+    aiClient = new GoogleGenAI({ apiKey: key || 'dummy-key' });
+  }
+  return aiClient;
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   let binary = '';
@@ -13,6 +25,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string) {
+  const ai = getAi();
   const prompt = `
     Extract data from this Indonesian KTP (Identity Card). 
     Return ONLY a JSON object with these keys:
@@ -69,6 +82,7 @@ export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string)
 }
 
 export async function analyzeVillageData(stats: any) {
+  const ai = getAi();
   const prompt = `
     Analyze this village demographic data for the village of Tarempa Selatan:
     ${JSON.stringify(stats)}
