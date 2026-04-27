@@ -44,13 +44,15 @@ export default function UserManagementView() {
 
   // Listen to users
   useEffect(() => {
+    if (profile?.role !== 'ADMIN') return;
+    
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
       setUsers(data);
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [profile]);
 
   const handleUpdateUser = async (userId: string, updates: Partial<UserProfile>) => {
     setSavingId(userId);

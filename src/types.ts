@@ -50,6 +50,7 @@ export interface CitizenData {
   education: string;
   nkk?: string;
   familyHead: string;
+  familyStatus?: string;
   socialAssistance: string[];
   economicStatus?: string;
   verificationStatus: VerificationStatus;
@@ -106,6 +107,7 @@ export interface VillageSettings {
   sekretarisDesa: string;
   kaurKeuangan?: string;
   logoUrl?: string; // TBD later
+  address?: string;
   rts: string[];
   rws: string[];
   dusuns: string[];
@@ -121,5 +123,20 @@ export interface NewsItem {
   targetRt?: string;
   targetRw?: string;
   imageUrl?: string;
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id?: string;
+  userId?: string; 
+  title: string;
+  message: string;
+  type: 'VERIFICATION' | 'LETTER' | 'COMPLAINT' | 'SYSTEM';
+  read: boolean;
+  targetRole?: UserRole;
+  targetRt?: string;
+  targetRw?: string;
+  targetDusun?: string;
+  link?: string;
   createdAt: string;
 }

@@ -31,7 +31,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { CitizenData } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -52,10 +52,24 @@ export default function Statistics() {
       return;
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'citizens'), (snapshot) => {
+    // Build scoped query
+    // Strictly only count those with role 'CITIZEN'
+    let q = query(collection(db, 'citizens'), where('role', '==', 'CITIZEN'));
+    if (profile?.role === 'RT' && profile.rt) {
+      q = query(q, where('rt', '==', profile.rt));
+    } else if (profile?.role === 'RW' && profile.rw) {
+      q = query(q, where('rw', '==', profile.rw));
+    } else if (profile?.role === 'KADUS' && profile.dusun) {
+      q = query(q, where('dusun', '==', profile.dusun));
+    } else if (profile?.role !== 'ADMIN') {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CitizenData));
       
-      // Filter strictly by CITIZEN role as per user request
+      // Secondary safety filter
       data = data.filter(c => c.role === 'CITIZEN');
 
       if (profile?.role === 'RT') {

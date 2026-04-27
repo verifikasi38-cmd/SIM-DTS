@@ -1,0 +1,21 @@
+export const OCCUPATIONS = [
+  "Belum / Tidak Bekerja",
+  "Pelajar / Mahasiswa",
+  "Mengurus Rumah Tangga",
+  "PNS / ASN",
+  "TNI / POLRI",
+  "Pegawai Swasta",
+  "Wiraswasta",
+  "Pedagang",
+  "Petani / Pekebun",
+  "Nelayan",
+  "Buruh Harian Lepas",
+  "Guru / Dosen",
+  "Tenaga Kesehatan",
+  "Sopir / Transportasi",
+  "Teknisi / Tukang",
+  "Perangkat Desa",
+  "Pensiunan",
+  "Pekerja Migran",
+  "Freelancer / Konten Kreator"
+];

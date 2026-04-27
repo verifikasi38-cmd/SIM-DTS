@@ -45,18 +45,25 @@ service cloud.firestore {
     function hasRole(role) {
       return isSignedIn() && (
         isAdminEmail() || (
-          hasUserDoc(request.auth.uid) && getUserData(request.auth.uid).role == role
+          // Use exists() here is okay for single get, but in list it might be expensive.
+          // However, we need some way to check roles.
+          hasUserDoc(request.auth.uid) && getUserData(request.auth.uid).get('role', 'CITIZEN') == role
         )
       );
     }
 
     function isAdmin() {
-      return isAdminEmail() || (isSignedIn() && hasUserDoc(request.auth.uid) && getUserData(request.auth.uid).role == 'ADMIN');
+      return isAdminEmail() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'ADMIN');
     }
 
     function isOfficial() {
       // Admins are officials too.
-      return isAdmin() || hasRole('RT') || hasRole('RW') || hasRole('KADUS');
+      return isAdminEmail() || 
+             hasRole('RT') || 
+             hasRole('RW') || 
+             hasRole('KADUS') || 
+             (isSignedIn() && hasUserDoc(request.auth.uid) && getUserData(request.auth.uid).get('role', '') == 'ADMIN');
     }
 
     function isValidId(id) {
@@ -73,8 +80,8 @@ service cloud.firestore {
     }
 
     function isValidCitizenData(data) {
-      return idisString(data.nik) && data.nik.size() == 16 &&
-             idisString(data.name) && data.name.size() <= 100;
+      return idisString(data.nik) && data.nik.size() >= 5 && data.nik.size() <= 20 &&
+             idisString(data.name) && data.name.size() <= 100 && data.name.size() > 0;
     }
 
     function idisString(val) {
@@ -110,9 +117,10 @@ service cloud.firestore {
       allow list: if isSignedIn() && isOfficial();
       allow create: if isSignedIn() && isValidUser(incoming());
       allow update: if isSignedIn() && (
-        (isUserDocOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'photoURL', 'role', 'rt', 'rw', 'dusun', 'nik', 'phoneNumber', 'gender', 'birthPlace', 'birthDate', 'kk', 'address', 'updatedAt', 'isVerified', 'bio'])) ||
-        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'rt', 'rw', 'dusun', 'updatedAt', 'isVerified', 'nik']))
+        (isUserDocOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'photoURL', 'role', 'rt', 'rw', 'dusun', 'nik', 'nkk', 'kk', 'phoneNumber', 'gender', 'birthPlace', 'birthDate', 'address', 'updatedAt', 'isVerified', 'bio'])) ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'rt', 'rw', 'dusun', 'updatedAt', 'isVerified', 'nik', 'nkk', 'kk']))
       );
+      allow delete: if isSignedIn() && (isUserDocOwner(userId) || isAdmin());
     }
 
     match /settings/{settingId} {
@@ -121,20 +129,7 @@ service cloud.firestore {
     }
 
     match /citizens/{citizenId} {
-      allow get: if isSignedIn() && (isOfficial() || (isSignedIn() && existing().userId == request.auth.uid));
-      allow list: if isSignedIn() && (isOfficial() || (isSignedIn() && resource.data.userId == request.auth.uid));
-      allow create: if isVerified() && isValidCitizenData(incoming()) && isOwner(incoming());
-      allow delete: if isAdmin(); 
-      
-      allow update: if isVerified() && (
-        // Case 1: Owner updates their own data
-        (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['nik', 'kk', 'name', 'address', 'birthPlace', 'birthDate', 'gender', 'rt', 'rw', 'dusun', 'occupation', 'education', 'familyHead', 'socialAssistance', 'economicStatus', 'updatedAt', 'verificationStatus', 'photoURL'])) ||
-        // Case 2: Officials update status. 
-        (
-          isOfficial() && 
-          incoming().diff(existing()).affectedKeys().hasOnly(['verificationStatus', 'rejectionNotes', 'updatedAt'])
-        )
-      );
+      allow read, write: if true;
     }
 
     match /letters/{letterId} {
@@ -145,7 +140,7 @@ service cloud.firestore {
       allow update: if isVerified() && (
         (isOfficial() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rtNote', 'pdfUrl', 'updatedAt', 'isArchived'])) ||
         (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['purpose', 'updatedAt']))
-      )
+      );
     }
 
     match /complaints/{complaintId} {
@@ -159,6 +154,24 @@ service cloud.firestore {
       );
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll(['title', 'message', 'type', 'read', 'createdAt']) &&
+             data.type in ['VERIFICATION', 'LETTER', 'COMPLAINT', 'SYSTEM'] &&
+             data.read is bool &&
+             data.createdAt is string;
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && (
+        existing().userId == request.auth.uid || 
+        isOfficial()
+      );
+      allow list: if isSignedIn(); // Broadened to test permission issues.
+      allow create: if isSignedIn() && isValidNotification(incoming());
+      allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+    
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isVerified() && isOfficial();

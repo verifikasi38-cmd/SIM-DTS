@@ -276,20 +276,6 @@ export default function AuthView() {
             </button>
           </form>
 
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase tracking-widest"><span className="bg-[#f8fafc] px-3 text-slate-400 font-bold">Atau gunakan Google</span></div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => login()}
-            className="w-full h-12 bg-white border border-slate-200 rounded-2xl font-bold text-slate-700 flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-[0.98]"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="" />
-            Masuk dengan Google
-          </button>
-
           <p className="text-center mt-10 text-slate-500 font-medium text-sm">
             {!isRegister ? 'Belum punya akun warga?' : 'Sudah terdaftar di sistem?'}
             <button

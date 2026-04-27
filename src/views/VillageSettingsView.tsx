@@ -16,6 +16,8 @@ export default function VillageSettingsView() {
     desa: 'Tarempa Selatan',
     kepalaDesa: '',
     sekretarisDesa: '',
+    address: '',
+    logoUrl: '',
     rts: ['001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013'],
     rws: ['001', '002', '003', '004'],
     dusuns: ['Dusun I Batu Tambun', 'Dusun II Gudang Tengah Rintis'],
@@ -115,6 +117,32 @@ export default function VillageSettingsView() {
                <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-2">Desa</label>
                   <input type="text" className="w-full mt-2 h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={settings.desa} onChange={e => setSettings({...settings, desa: e.target.value})} />
+               </div>
+               
+               <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-2">Alamat Kantor Desa</label>
+                  <textarea className="w-full mt-2 h-24 bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={settings.address || ''} onChange={e => setSettings({...settings, address: e.target.value})} />
+               </div>
+               
+               <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-2">Logo Desa</label>
+                  <input type="text" className="w-full mt-2 h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={settings.logoUrl || ''} onChange={e => setSettings({...settings, logoUrl: e.target.value})} placeholder="URL Logo atau upload file..." />
+                  <input
+                     type="file"
+                     accept="image/*"
+                     onChange={(e) => {
+                         const file = e.target.files?.[0];
+                         if (file) {
+                             const reader = new FileReader();
+                             reader.onloadend = () => {
+                                 setSettings(prev => ({ ...prev, logoUrl: reader.result as string }));
+                             };
+                             reader.readAsDataURL(file);
+                         }
+                     }}
+                     className="w-full mt-2 text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  />
+
                </div>
             </div>
 

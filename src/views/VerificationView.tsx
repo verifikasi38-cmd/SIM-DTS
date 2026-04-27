@@ -20,11 +20,15 @@ import {
   AlertTriangle,
   History,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { CitizenData } from '../types';
+import { NotificationService } from '../services/NotificationService';
+import { CitizenDataService } from '../services/CitizenDataService';
+import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 
 export default function VerificationView() {
   const { profile } = useAuth();
@@ -37,57 +41,84 @@ export default function VerificationView() {
   const [filterMode, setFilterMode] = useState<'ANTREAN' | 'VALID'>('ANTREAN');
 
   useEffect(() => {
+    console.log("DEBUG: profile role=", profile?.role, "dusun=", profile?.dusun, "rt=", profile?.rt, "rw=", profile?.rw);
     if (!profile) return;
 
     // Build query based on role
-    // ADMIN in VALID mode sees EVERYTHING
-    // Others see their specific targets
+    const citizensRef = collection(db, 'citizens');
+    
+    console.log("DEBUG: Building query for role:", profile?.role, "with filter:", filterMode);
+    
     let verificationTarget = 'PENDING';
+    
     if (filterMode === 'ANTREAN') {
-       if (profile.role === 'RW') verificationTarget = 'RT_APPROVED';
-       if (profile.role === 'ADMIN' || profile.role === 'KADUS') verificationTarget = 'RW_APPROVED';
+       if (profile.role === 'RT') verificationTarget = 'PENDING';
+       else if (profile.role === 'RW') verificationTarget = 'RT_APPROVED';
+       else if (profile.role === 'KADUS') verificationTarget = 'RW_APPROVED';
+       else if (profile.role === 'ADMIN') verificationTarget = 'KADUS_APPROVED'; // Default to final stage
     } else {
-       // Mode VALID
        if (profile.role === 'RT') verificationTarget = 'RT_APPROVED';
        else if (profile.role === 'RW') verificationTarget = 'RW_APPROVED';
+       else if (profile.role === 'KADUS') verificationTarget = 'KADUS_APPROVED';
        else verificationTarget = 'ADMIN_APPROVED';
     }
+    
+    console.log("DEBUG: Target status:", verificationTarget);
 
-    // Special case for ADMIN/KADUS: In VALID mode, show all that are at least RW_APPROVED or ADMIN_APPROVED
-    // or if the user specifically asked for "all data" for Admin, we can just fetch everything.
-    const citizensRef = collection(db, 'citizens');
     let q;
-
     if (profile.role === 'ADMIN' && filterMode === 'VALID') {
-       q = query(citizensRef); // Admin sees everything in Valid mode
+       q = query(citizensRef, where('role', '==', 'CITIZEN'));
     } else {
-       q = query(
-         citizensRef,
-         where('verificationStatus', '==', verificationTarget)
-       );
+       const constraints = [
+         where('role', '==', 'CITIZEN'),
+       ];
+       
+       if (filterMode === 'ANTREAN') {
+          constraints.push(where('verificationStatus', '==', verificationTarget));
+       } else {
+          constraints.push(where('verificationStatus', 'in', [verificationTarget, 'ADMIN_APPROVED']));
+       }
+       
+       // Optimization: Use Firestore queries for regional filtering if set
+       if (profile.role === 'RT') {
+         if (profile.rt) constraints.push(where('rt', '==', profile.rt));
+         else { console.warn("DEBUG: RT profile missing rt info."); }
+       } else if (profile.role === 'RW') {
+         if (profile.rw) constraints.push(where('rw', '==', profile.rw));
+         else { console.warn("DEBUG: RW profile missing rw info."); }
+       } else if (profile.role === 'KADUS') {
+         if (profile.dusun) constraints.push(where('dusun', '==', profile.dusun));
+         else { console.warn("DEBUG: KADUS profile missing dusun info, profile:", profile); }
+       }
+       
+       console.log("DEBUG: Constraints:", constraints);
+       q = query(citizensRef, ...constraints);
     }
 
+    // Special ADMIN bypass: If ADMIN in ANTREAN mode wants to oversight, we could load more.
+    // But let's follow the user's specific request about RT/RW/KADUS first.
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CitizenData));
       
       // Filter strictly by CITIZEN role as per user request
       data = data.filter(c => c.role === 'CITIZEN');
 
-      // Filter by RT/RW if applicable
-      if (profile.role === 'RT') {
+      // Final JS fallback filtering if query was broad or profile data is missing in query
+      if (profile.role === 'RT' && profile.rt) {
         data = data.filter(c => c.rt === profile.rt);
-      } else if (profile.role === 'RW') {
+      } else if (profile.role === 'RW' && profile.rw) {
         data = data.filter(c => c.rw === profile.rw);
-      } else if (profile.role === 'KADUS') {
-        data = data.filter(c => c.dusun === profile.dusun);
+      } else if (profile.role === 'KADUS' && profile.dusun) {
+        data = data.filter(c => c.dusun && c.dusun.trim().toLowerCase() === profile.dusun!.trim().toLowerCase());
       }
 
-      setCitizens(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error in verification list listener:", error);
-      setLoading(false);
-    });
+        setCitizens(data);
+        setLoading(false);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'citizens');
+        setLoading(false);
+      });
 
     return () => unsubscribe();
   }, [profile, filterMode]);
@@ -99,22 +130,117 @@ export default function VerificationView() {
       
       if (action === 'APPROVE') {
         let nextStatus: string = 'RT_APPROVED';
-        if (profile?.role === 'RW') nextStatus = 'RW_APPROVED';
-        if (profile?.role === 'ADMIN' || profile?.role === 'KADUS') nextStatus = 'ADMIN_APPROVED';
+        let targetRole: any = 'RW';
+        let message = `Data warga ${selectedCitizen?.name} telah disetujui oleh RT. Mohon verifikasi tingkat RW.`;
+
+        if (profile?.role === 'RT') {
+           nextStatus = 'RT_APPROVED';
+           targetRole = 'RW';
+           message = `Data warga ${selectedCitizen?.name} telah disetujui oleh RT. Mohon verifikasi tingkat RW.`;
+        } else if (profile?.role === 'RW') {
+          nextStatus = 'RW_APPROVED';
+          targetRole = 'KADUS';
+          message = `Data warga ${selectedCitizen?.name} telah disetujui oleh RW. Mohon verifikasi tingkat Dusun.`;
+        } else if (profile?.role === 'KADUS') {
+          nextStatus = 'KADUS_APPROVED';
+          targetRole = 'ADMIN';
+          message = `Data warga ${selectedCitizen?.name} telah disetujui oleh Kadus. Mohon verifikasi tingkat Desa.`;
+        } else if (profile?.role === 'ADMIN') {
+          nextStatus = 'ADMIN_APPROVED';
+          targetRole = null; // Final
+        }
         
         await updateDoc(citizenRef, {
           verificationStatus: nextStatus as any,
           updatedAt: new Date().toISOString()
         });
+
+        // Notify next level
+        if (targetRole) {
+          await NotificationService.sendNotification({
+            title: 'Verifikasi Lanjutan Berjenjang',
+            message: message,
+            type: 'VERIFICATION',
+            targetRole: targetRole,
+            targetRw: selectedCitizen?.rw,
+            targetDusun: selectedCitizen?.dusun,
+            link: '/verification'
+          });
+        }
+
+        // Notify Citizen
+        await NotificationService.sendNotification({
+          userId: selectedCitizen?.userId,
+          title: 'Update Verifikasi Data',
+          message: `Data Anda telah disetujui oleh ${profile?.role}. ${targetRole ? 'Menunggu verifikasi tingkat selanjutnya.' : 'Verifikasi selesai!'}`,
+          type: 'VERIFICATION',
+          read: false,
+          createdAt: new Date().toISOString()
+        } as any);
+
       } else {
         await updateDoc(citizenRef, {
           verificationStatus: 'REJECTED',
           updatedAt: new Date().toISOString()
         });
+
+        // Notify Citizen
+        await NotificationService.sendNotification({
+          userId: selectedCitizen?.userId,
+          title: 'Data Ditolak',
+          message: `Maaf, data kependudukan Anda ditolak oleh ${profile?.role}. Silakan periksa kembali data Anda.`,
+          type: 'VERIFICATION',
+        });
       }
       setSelectedCitizen(null);
     } catch (error) {
       console.error(error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (citizen: CitizenData) => {
+    if (!citizen.id) return;
+    
+    const confirmDelete = window.confirm(`HAPUS DATA WARGA: Anda akan menghapus data ${citizen.name} secara permanen. Hal ini memungkinkan warga tersebut untuk mendaftar ulang jika terjadi kesalahan data yang tidak bisa diedit. Lanjutkan?`);
+    if (!confirmDelete) return;
+
+    setActionLoading(citizen.id);
+    console.log("Starting deletion of citizen:", citizen.id, "for user:", citizen.userId);
+    
+    try {
+      // 1. Delete the citizen identity document
+      await deleteDoc(doc(db, 'citizens', citizen.id));
+      console.log("Citizen document deleted successfully");
+      
+      // 2. Clear user profile registration data so they can start over
+      if (citizen.userId) {
+         try {
+           const userRef = doc(db, 'users', citizen.userId);
+           await updateDoc(userRef, {
+              nik: "", // Use empty string instead of null just in case of rule restrictions
+              kk: "",
+              nkk: "",
+              isVerified: false,
+              updatedAt: new Date().toISOString()
+           });
+           console.log("User profile reset successfully");
+         } catch (userError) {
+           console.error("Warning: Citizen deleted but user profile reset failed:", userError);
+           // We don't fail the whole operation if profile reset fails, 
+           // as the main data is already gone.
+         }
+      }
+
+      alert(`Data ${citizen.name} berhasil dihapus.`);
+      // The onSnapshot in the component will automatically update the UI
+    } catch (error: any) {
+      console.error("Delete operation failed:", error);
+      const errorMessage = error.message || "Gagal menghapus data warga.";
+      alert(errorMessage.includes("insufficient permissions") 
+        ? "Gagal: Anda tidak memiliki izin untuk menghapus data ini." 
+        : `Gagal menghapus data: ${errorMessage}`);
     } finally {
       setActionLoading(null);
     }
@@ -161,6 +287,24 @@ export default function VerificationView() {
            </div>
         </div>
       </div>
+
+      {/* Profile Scope Warning */}
+      {((profile?.role === 'RT' && !profile.rt) || (profile?.role === 'RW' && !profile.rw) || (profile?.role === 'KADUS' && !profile.dusun)) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-[2rem] p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+             <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+                <AlertTriangle className="w-7 h-7" />
+             </div>
+             <div className="text-center md:text-left flex-1">
+                <h3 className="text-lg font-extrabold text-amber-900 mb-1 leading-tight">Profil Petugas Belum Lengkap</h3>
+                <p className="text-sm text-amber-700 font-medium leading-relaxed">
+                   Peran Anda adalah <strong>{profile?.role}</strong>, namun nomor {profile?.role} Anda belum ditetapkan oleh Administrator. Anda tidak akan melihat data warga sampai lingkup wilayah Anda diatur.
+                </p>
+             </div>
+             <div className="p-3 bg-white/50 rounded-xl text-[10px] font-extrabold text-amber-600 uppercase tracking-widest border border-amber-100">
+                Hubungi Admin Desa
+             </div>
+          </div>
+      )}
 
       {/* Main Worklist */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden">
@@ -245,20 +389,31 @@ export default function VerificationView() {
                                   {c.verificationStatus === 'ADMIN_APPROVED' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />} 
                                   {c.verificationStatus === 'PENDING' && 'Tahap RT'}
                                   {c.verificationStatus === 'RT_APPROVED' && 'Tahap RW'}
-                                  {c.verificationStatus === 'RW_APPROVED' && 'Tahap Desa'}
+                                  {c.verificationStatus === 'RW_APPROVED' && 'Tahap Dusun/Kadus'}
+                                  {c.verificationStatus === 'KADUS_APPROVED' && 'Tahap Desa'}
                                   {c.verificationStatus === 'ADMIN_APPROVED' && 'Terverifikasi'}
                                   {c.verificationStatus === 'REJECTED' && 'Ditolak'}
                                </div>
                             </div>
                          </td>
                          <td className="px-8 py-5 text-right">
-                            <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center justify-end gap-3 transition-opacity">
                                 <button 
                                  onClick={() => setSelectedCitizen(c)}
                                  className="h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 shadow-sm hover:border-indigo-600 hover:text-indigo-600 transition-all flex items-center gap-2"
                                >
                                   <Eye className="w-4 h-4" /> Tinjau Data
                                </button>
+                               {profile?.role === 'ADMIN' && (
+                                 <button 
+                                   onClick={() => handleDelete(c)}
+                                   disabled={!!actionLoading}
+                                   title="Hapus Data (Kembalikan ke pendaftaran awal)"
+                                   className="h-10 w-10 flex items-center justify-center bg-rose-50 border border-rose-200 rounded-xl text-rose-500 shadow-sm hover:bg-rose-100 hover:text-rose-600 transition-all"
+                                 >
+                                    {actionLoading === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                 </button>
+                               )}
                                {filterMode === 'ANTREAN' && (
                                  <button 
                                    onClick={() => handleAction(c.id!, 'APPROVE')}
@@ -282,6 +437,7 @@ export default function VerificationView() {
       <AnimatePresence>
         {selectedCitizen && (
           <>
+            {console.log("DEBUG: selectedCitizen:", selectedCitizen)}
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

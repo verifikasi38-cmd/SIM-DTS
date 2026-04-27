@@ -5,6 +5,7 @@ import {
   getDocs, 
   addDoc, 
   updateDoc, 
+  deleteDoc,
   doc, 
   serverTimestamp,
   orderBy,
@@ -40,8 +41,11 @@ export const CitizenDataService = {
   async updateCitizenData(id: string, data: Partial<CitizenDataType>) {
     try {
       const citizenDoc = doc(db, 'citizens', id);
+      // Strip immutable fields from partial data to avoid security rule violations
+      const { id: _id, createdAt: _ca, updatedAt: _ua, ...updateData } = data as any;
+      
       await updateDoc(citizenDoc, {
-        ...data,
+        ...updateData,
         updatedAt: serverTimestamp(),
       });
     } catch (error) {
@@ -70,7 +74,6 @@ export const CitizenDataService = {
 
   async deleteCitizen(id: string) {
     try {
-      const { deleteDoc, doc } = await import('firebase/firestore');
       await deleteDoc(doc(db, 'citizens', id));
     } catch (error) {
       handleFirestoreError(error, 'delete', `citizens/${id}`);

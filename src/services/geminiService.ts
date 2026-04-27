@@ -55,7 +55,7 @@ export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string)
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [
         {
           parts: [
@@ -97,7 +97,7 @@ export async function analyzeVillageData(stats: any) {
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
     return response.text || "Analysis currently unavailable.";

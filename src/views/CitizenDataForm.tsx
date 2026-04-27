@@ -15,13 +15,21 @@ import {
   AlertCircle,
   Smartphone,
   Eye,
-  Info
+  Info,
+  Briefcase,
+  GraduationCap
 } from 'lucide-react';
 import { CitizenDataService } from '../services/CitizenDataService';
 import { CitizenData } from '../types';
 import { extractKtpData } from '../services/geminiService';
+import { NotificationService } from '../services/NotificationService';
+import { resizeImage } from '../lib/imageUtils';
+import { OCCUPATIONS } from '../constants/occupations';
+import { EDUCATION_LEVELS } from '../constants/education';
+import { db } from '../lib/firebase';
+import { updateDoc, doc } from 'firebase/firestore';
 
-export default function CitizenDataForm() {
+export default function CitizenDataForm({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const { profile, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -31,8 +39,40 @@ export default function CitizenDataForm() {
     socialAssistance: [],
   });
   const [scanning, setScanning] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateStep = (step: number) => {
+    const errors: string[] = [];
+    if (step === 2) {
+      if (!formData.nik || formData.nik.length < 16) errors.push("NIK harus 16 digit");
+      if (!formData.name) errors.push("Nama lengkap harus diisi");
+      if (!formData.birthPlace) errors.push("Tempat lahir harus diisi");
+      if (!formData.birthDate) errors.push("Tanggal lahir harus diisi");
+      if (!formData.gender) errors.push("Jenis kelamin harus dipilih");
+    }
+    if (step === 3) {
+      if (!formData.nkk || formData.nkk.length < 16) errors.push("Nomor KK harus 16 digit");
+      if (!formData.familyStatus) errors.push("Status dalam keluarga harus dipilih");
+      if (!formData.familyHead) errors.push("Nama kepala keluarga harus diisi");
+      if (!formData.occupation) errors.push("Pekerjaan harus diisi");
+      if (!formData.education) errors.push("Pendidikan terakhir harus diisi");
+      if (!formData.address) errors.push("Alamat harus diisi");
+      if (!formData.dusun) errors.push("Dusun harus dipilih");
+      if (!formData.rt) errors.push("RT harus dipilih");
+      if (!formData.rw) errors.push("RW harus dipilih");
+    }
+    setFormErrors(errors);
+    return errors.length === 0;
+  };
+
+  const nextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep(prev => prev + 1);
+      setFormErrors([]);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -54,8 +94,10 @@ export default function CitizenDataForm() {
 
     setScanning(true);
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const extractedData = await extractKtpData(arrayBuffer, file.type);
+      // Resize image for mobile efficiency
+      const resizedBlob = await resizeImage(file, 1200, 1200);
+      const arrayBuffer = await resizedBlob.arrayBuffer();
+      const extractedData = await extractKtpData(arrayBuffer, 'image/jpeg');
       
       setFormData(prev => ({
         ...prev,
@@ -85,17 +127,41 @@ export default function CitizenDataForm() {
       const payload = {
         ...formData,
         userId: user!.uid,
-        role: profile?.role || 'CITIZEN',
+        role: 'CITIZEN', // Always register as 'CITIZEN' in identities collection
       } as Omit<CitizenData, 'id' | 'createdAt' | 'updatedAt'>;
 
       if (existingData?.id) {
         await CitizenDataService.updateCitizenData(existingData.id, payload as any);
       } else {
         await CitizenDataService.createCitizenData(payload);
+        
+        // Notify RT
+        await NotificationService.sendNotification({
+          title: 'Pendataan Warga Baru',
+          message: `Warga baru ${formData.name} telah mengirimkan data kependudukan. Mohon verifikasi.`,
+          type: 'VERIFICATION',
+          targetRole: 'RT',
+          targetRt: formData.rt || profile?.rt || '001',
+          targetRw: formData.rw || profile?.rw || '001',
+          link: '/verification'
+        });
       }
+
+      // Update user profile with KK and regional data
+      if (formData.nkk) {
+        await updateDoc(doc(db, 'users', user!.uid), { 
+          kk: formData.nkk, 
+          nkk: formData.nkk,
+          rt: formData.rt,
+          rw: formData.rw,
+          dusun: formData.dusun
+        });
+      }
+
       setCurrentStep(5); // Success step
     } catch (error) {
       console.error(error);
+      alert("Gagal mengirim data. Silakan coba lagi nanti atau hubungi petugas.");
     } finally {
       setLoading(false);
     }
@@ -208,7 +274,7 @@ export default function CitizenDataForm() {
                    disabled={scanning}
                    className="h-14 px-8 gradient-primary text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-transform active:scale-95 disabled:opacity-50"
                  >
-                    <Camera className="w-5 h-5" /> Ambil Foto KTP
+                    <Camera className="w-5 h-5" /> Scan/Upload KTP
                  </button>
                  <button 
                    onClick={() => setCurrentStep(2)}
@@ -243,9 +309,10 @@ export default function CitizenDataForm() {
                      <div className="relative group">
                         <input 
                           type="text" 
+                          maxLength={16}
                           value={formData.nik || ''} 
-                          onChange={e => setFormData({...formData, nik: e.target.value})}
-                          className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold tracking-widest transition-all" 
+                          onChange={e => setFormData({...formData, nik: e.target.value.replace(/\D/g, '')})}
+                          className={`w-full h-12 px-5 bg-white border ${formData.nik?.length !== 16 ? 'border-rose-200 focus:ring-rose-50' : 'border-slate-200 focus:ring-indigo-50'} rounded-2xl outline-none focus:border-indigo-500 font-bold tracking-widest transition-all`} 
                           placeholder="3200xxxxxxxx"
                         />
                      </div>
@@ -256,7 +323,7 @@ export default function CitizenDataForm() {
                        type="text" 
                        value={formData.name || ''} 
                        onChange={e => setFormData({...formData, name: e.target.value})}
-                       className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                       className={`w-full h-12 px-5 bg-white border ${!formData.name ? 'border-rose-200 focus:ring-rose-50' : 'border-slate-200 focus:ring-indigo-50'} rounded-2xl outline-none focus:border-indigo-500 font-bold transition-all`} 
                        placeholder="Nama Lengkap"
                      />
                   </div>
@@ -268,13 +335,13 @@ export default function CitizenDataForm() {
                           value={formData.birthPlace || ''} 
                           placeholder="Tempat"
                           onChange={e => setFormData({...formData, birthPlace: e.target.value})}
-                          className="h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                          className={`h-12 px-5 bg-white border ${!formData.birthPlace ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all`} 
                         />
                         <input 
                           type="date" 
                           value={formData.birthDate || ''} 
                           onChange={e => setFormData({...formData, birthDate: e.target.value})}
-                          className="h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                          className={`h-12 px-5 bg-white border ${!formData.birthDate ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all`} 
                         />
                      </div>
                   </div>
@@ -284,6 +351,7 @@ export default function CitizenDataForm() {
                         {['Laki-laki', 'Perempuan'].map(gen => (
                           <button 
                             key={gen}
+                            type="button"
                             onClick={() => setFormData({...formData, gender: gen as any})}
                             className={`flex-1 h-12 rounded-2xl border-2 font-bold text-sm transition-all ${
                               formData.gender === gen ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'
@@ -296,12 +364,30 @@ export default function CitizenDataForm() {
                   </div>
                </div>
 
+               {formErrors.length > 0 && currentStep === 2 && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="p-4 bg-rose-50 border border-rose-100 rounded-2xl"
+                  >
+                     <div className="flex gap-3">
+                        <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                        <div className="space-y-1">
+                           <p className="text-sm font-bold text-rose-800">Mohon lengkapi data:</p>
+                           <ul className="text-xs text-rose-600 font-medium list-disc ml-4">
+                              {formErrors.map((err, i) => <li key={i}>{err}</li>)}
+                           </ul>
+                        </div>
+                     </div>
+                  </motion.div>
+               )}
+
                <div className="pt-8 border-t border-slate-100 flex justify-between items-center">
                   <button onClick={() => setCurrentStep(1)} className="flex items-center gap-2 text-slate-400 font-bold hover:text-indigo-600 transition-colors">
                      <ChevronLeft className="w-5 h-5" /> Kembali
                   </button>
                   <button 
-                    onClick={() => setCurrentStep(3)} 
+                    onClick={nextStep} 
                     className="h-12 px-8 gradient-primary text-white rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-100 hover:scale-105 transition-transform"
                   >
                      Selanjutnya <ChevronRight className="w-5 h-5" />
@@ -320,39 +406,137 @@ export default function CitizenDataForm() {
             >
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="md:col-span-2 space-y-3">
+                     <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Keluarga</label>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Nomor Kartu Keluarga (KK)</label>
+                           <input 
+                             type="text" 
+                             maxLength={16}
+                             value={formData.nkk || ''} 
+                             onChange={e => setFormData({...formData, nkk: e.target.value.replace(/\D/g, '')})}
+                             className={`w-full h-12 px-5 bg-white border ${formData.nkk?.length !== 16 ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold tracking-widest transition-all`} 
+                             placeholder="16 digit Nomor KK"
+                           />
+                        </div>
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Status Dalam Keluarga (SHDK)</label>
+                           <select
+                              value={formData.familyStatus || ''}
+                              onChange={e => setFormData({...formData, familyStatus: e.target.value})}
+                              className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all text-slate-700 appearance-none"
+                           >
+                              <option value="" disabled>Pilih Status...</option>
+                              <option value="Kepala Keluarga">Kepala Keluarga</option>
+                              <option value="Suami">Suami</option>
+                              <option value="Istri">Istri</option>
+                              <option value="Anak">Anak</option>
+                              <option value="Menantu">Menantu</option>
+                              <option value="Cucu">Cucu</option>
+                              <option value="Orang Tua">Orang Tua</option>
+                              <option value="Mertua">Mertua</option>
+                              <option value="Famili Lain">Famili Lain</option>
+                              <option value="Pembantu">Pembantu</option>
+                              <option value="Lainnya">Lainnya</option>
+                           </select>
+                        </div>
+                     </div>
+                  </div>
+                  <div className="md:col-span-2 space-y-3">
                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Nama Kepala Keluarga (Sesuai KK)</label>
                      <input 
                        type="text" 
                        value={formData.familyHead || ''} 
                        onChange={e => setFormData({...formData, familyHead: e.target.value})}
-                       className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                       className={`w-full h-12 px-5 bg-white border ${!formData.familyHead ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all`} 
                        placeholder="Nama Lengkap Kepala Keluarga..."
                      />
                   </div>
                   <div className="space-y-3">
                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Pekerjaan Utama</label>
-                     <div className="relative group">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-indigo-500 transition-colors">
-                           <MapPin className="w-5 h-5 text-slate-300" />
+                     <div className="space-y-3">
+                        <div className="relative group">
+                           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-indigo-500 transition-colors">
+                              <Briefcase className="w-5 h-5 text-slate-300" />
+                           </div>
+                           <select 
+                              value={OCCUPATIONS.includes(formData.occupation || '') ? formData.occupation : (formData.occupation ? 'Lainnya' : '')} 
+                              onChange={e => {
+                                 const val = e.target.value;
+                                 if (val === 'Lainnya') {
+                                    setFormData({...formData, occupation: ''});
+                                 } else {
+                                    setFormData({...formData, occupation: val});
+                                 }
+                              }}
+                              className="w-full h-12 pl-12 pr-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all appearance-none text-slate-700" 
+                           >
+                              <option value="" disabled>Pilih Pekerjaan...</option>
+                              {OCCUPATIONS.map(occ => (
+                                 <option key={occ} value={occ}>{occ}</option>
+                              ))}
+                              <option value="Lainnya">Lainnya (Isi Sendiri)</option>
+                           </select>
                         </div>
-                        <input 
-                          type="text" 
-                          value={formData.occupation || ''} 
-                          onChange={e => setFormData({...formData, occupation: e.target.value})}
-                          className="w-full h-12 pl-12 pr-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
-                          placeholder="Contoh: Buruh Tani / Perkebunan"
-                        />
+                        {(formData.occupation === '' || !OCCUPATIONS.includes(formData.occupation || '')) && (formData.occupation !== undefined || (formData.occupation === '' && OCCUPATIONS.includes(formData.occupation || '') === false)) && (
+                           <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className="relative group"
+                           >
+                              <input 
+                                 type="text" 
+                                 value={formData.occupation || ''} 
+                                 onChange={e => setFormData({...formData, occupation: e.target.value})}
+                                 className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                                 placeholder="Tuliskan pekerjaan Anda..."
+                              />
+                           </motion.div>
+                        )}
                      </div>
                   </div>
                   <div className="space-y-3">
-                     <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Nomor Kartu Keluarga (KK)</label>
-                     <input 
-                       type="text" 
-                       value={formData.nkk || ''} 
-                       onChange={e => setFormData({...formData, nkk: e.target.value})}
-                       className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold tracking-widest transition-all" 
-                       placeholder="16 digit Nomor KK"
-                     />
+                     <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Pendidikan Terakhir</label>
+                     <div className="space-y-3">
+                        <div className="relative group">
+                           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-indigo-500 transition-colors">
+                              <GraduationCap className="w-5 h-5 text-slate-300" />
+                           </div>
+                           <select 
+                              value={EDUCATION_LEVELS.includes(formData.education || '') ? formData.education : (formData.education ? 'Lainnya' : '')} 
+                              onChange={e => {
+                                 const val = e.target.value;
+                                 if (val === 'Lainnya') {
+                                    setFormData({...formData, education: ''});
+                                 } else {
+                                    setFormData({...formData, education: val});
+                                 }
+                              }}
+                              className="w-full h-12 pl-12 pr-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all appearance-none text-slate-700" 
+                           >
+                              <option value="" disabled>Pilih Pendidikan...</option>
+                              {EDUCATION_LEVELS.map(edu => (
+                                 <option key={edu} value={edu}>{edu}</option>
+                              ))}
+                              <option value="Lainnya">Lainnya (Isi Sendiri)</option>
+                           </select>
+                        </div>
+                        {(formData.education === '' || !EDUCATION_LEVELS.includes(formData.education || '')) && (formData.education !== undefined || (formData.education === '' && EDUCATION_LEVELS.includes(formData.education || '') === false)) && (
+                           <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className="relative group"
+                           >
+                              <input 
+                                 type="text" 
+                                 value={formData.education || ''} 
+                                 onChange={e => setFormData({...formData, education: e.target.value})}
+                                 className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all" 
+                                 placeholder="Tuliskan pendidikan Anda..."
+                              />
+                           </motion.div>
+                        )}
+                     </div>
                   </div>
                   <div className="md:col-span-2 space-y-3">
                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Alamat Jalan</label>
@@ -360,7 +544,7 @@ export default function CitizenDataForm() {
                        rows={2}
                        value={formData.address || ''} 
                        onChange={e => setFormData({...formData, address: e.target.value})}
-                       className="w-full p-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all overflow-hidden"
+                       className={`w-full p-5 bg-white border ${!formData.address ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all overflow-hidden`}
                        placeholder="Nama jalan atau nomor rumah..."
                      />
                   </div>
@@ -369,7 +553,7 @@ export default function CitizenDataForm() {
                      <select 
                        value={formData.dusun || ''} 
                        onChange={e => setFormData({...formData, dusun: e.target.value})}
-                       className="w-full h-12 px-5 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all appearance-none"
+                       className={`w-full h-12 px-5 bg-white border ${!formData.dusun ? 'border-rose-200' : 'border-slate-200'} rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 font-bold transition-all appearance-none`}
                      >
                        <option value="">Pilih Dusun</option>
                        <option value="Dusun I Batu Tambun">Dusun I Batu Tambun</option>
@@ -406,12 +590,30 @@ export default function CitizenDataForm() {
                   </div>
                </div>
 
+               {formErrors.length > 0 && currentStep === 3 && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="p-4 bg-rose-50 border border-rose-100 rounded-2xl mb-4"
+                  >
+                     <div className="flex gap-3">
+                        <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                        <div className="space-y-1">
+                           <p className="text-sm font-bold text-rose-800">Mohon lengkapi data:</p>
+                           <ul className="text-xs text-rose-600 font-medium list-disc ml-4">
+                              {formErrors.map((err, i) => <li key={i}>{err}</li>)}
+                           </ul>
+                        </div>
+                     </div>
+                  </motion.div>
+               )}
+
                <div className="pt-8 border-t border-slate-100 flex justify-between items-center">
                   <button onClick={() => setCurrentStep(2)} className="flex items-center gap-2 text-slate-400 font-bold hover:text-indigo-600 transition-colors">
                      <ChevronLeft className="w-5 h-5" /> Kembali
                   </button>
                   <button 
-                    onClick={() => setCurrentStep(4)} 
+                    onClick={nextStep} 
                     className="h-12 px-8 gradient-primary text-white rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-100 hover:scale-105 transition-transform"
                   >
                      Review Terakhir <ChevronRight className="w-5 h-5" />
@@ -449,11 +651,23 @@ export default function CitizenDataForm() {
 
                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                   <button 
-                    onClick={handleSubmit}
+                    onClick={() => {
+                      if (validateStep(2) && validateStep(3)) {
+                        handleSubmit();
+                      } else {
+                        alert("Beberapa data masih kosong atau tidak valid (Format NIK/KK harus 16 digit). Mohon periksa kembali.");
+                        setCurrentStep(2);
+                      }
+                    }}
                     disabled={loading}
                     className="h-14 px-12 gradient-primary text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl shadow-indigo-100 hover:opacity-90 disabled:opacity-50 min-w-[200px]"
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Kirim Sekarang"}
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Mengirim...</span>
+                      </>
+                    ) : "Kirim Sekarang"}
                   </button>
                   <button 
                     onClick={() => setCurrentStep(2)}
@@ -486,12 +700,20 @@ export default function CitizenDataForm() {
                <p className="text-slate-500 font-medium mb-10 max-w-sm mx-auto leading-relaxed">
                   Data Anda telah masuk ke sistem SIM-DTS. Silakan informasikan kepada Ketua RT setempat untuk verifikasi data kependudukan Anda.
                </p>
-               <button 
-                 onClick={() => window.location.reload()}
-                 className="h-14 px-12 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-               >
-                  Ke Dashboard Saya
-               </button>
+               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  <button 
+                    onClick={() => setActiveTab ? setActiveTab('Dashboard') : window.location.reload()}
+                    className="h-14 px-10 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                  >
+                     Dashboard
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab ? setActiveTab('Keluarga') : window.location.reload()}
+                    className="h-14 px-10 gradient-primary text-white rounded-2xl font-bold hover:opacity-90 transition-all shadow-xl shadow-indigo-100 flex items-center gap-2"
+                  >
+                     <Users className="w-5 h-5" /> Lengkapi Data Keluarga
+                  </button>
+               </div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -7,9 +7,23 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+.print-only {
+  display: none;
+}
+@media print {
+  .print-only {
+    display: block !important;
+  }
+}
+
 @layer base {
   body {
-    @apply font-sans text-slate-900 bg-[#f8fafc] antialiased;
+    @apply font-sans text-slate-900 bg-[#f8fafc] dark:text-slate-100 dark:bg-slate-950 antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {

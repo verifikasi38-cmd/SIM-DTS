@@ -174,7 +174,9 @@ export default function LetterSystem() {
          kabupaten: 'Banyumas',
          kecamatan: 'Baturraden',
          desa: 'Karangtengah',
-         kepalaDesa: 'Budi Santoso, S.E.'
+         kepalaDesa: 'Budi Santoso, S.E.',
+         address: 'Jl. Raya Karangtengah No.1',
+         logoUrl: ''
       };
       
       try {
@@ -185,6 +187,8 @@ export default function LetterSystem() {
             villageData.kecamatan = vData.kecamatan || villageData.kecamatan;
             villageData.desa = vData.desa || villageData.desa;
             villageData.kepalaDesa = vData.kepalaDesa || villageData.kepalaDesa;
+            villageData.address = vData.address || villageData.address;
+            villageData.logoUrl = vData.logoUrl || villageData.logoUrl;
          }
       } catch (err) {
          console.warn("Could not fetch village settings, using defaults");
@@ -194,18 +198,44 @@ export default function LetterSystem() {
       const pageWidth = _doc.internal.pageSize.getWidth();
       
       // Header
+      // Logo placeholder
+      const logoUrl = villageData.logoUrl;
+      try {
+        if (logoUrl) {
+          if (logoUrl.startsWith('data:image')) {
+              const format = logoUrl.includes('png') ? 'PNG' : 'JPEG';
+              _doc.addImage(logoUrl, format, 20, 15, 25, 25);
+          } else if (logoUrl.startsWith('http')) {
+            const response = await fetch(logoUrl);
+            const blob = await response.blob();
+            const logoDataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            _doc.addImage(logoDataUrl, 'JPEG', 20, 15, 25, 25);
+          }
+        }
+      } catch (err) {
+        console.error("DEBUG: Could not load logo", err);
+      }
+
       _doc.setFontSize(16);
       _doc.setFont("helvetica", "bold");
-      _doc.text(`PEMERINTAH KABUPATEN ${villageData.kabupaten.toUpperCase()}`, pageWidth / 2, 20, { align: "center" });
+      _doc.text(`PEMERINTAH KABUPATEN ${villageData.kabupaten.toUpperCase()}`, pageWidth / 2 + 10, 20, { align: "center" });
       _doc.setFontSize(14);
-      _doc.text(`KECAMATAN ${villageData.kecamatan.toUpperCase()}`, pageWidth / 2, 28, { align: "center" });
+      _doc.text(`KECAMATAN ${villageData.kecamatan.toUpperCase()}`, pageWidth / 2 + 10, 28, { align: "center" });
       _doc.setFontSize(18);
-      _doc.text(`DESA ${villageData.desa.toUpperCase()}`, pageWidth / 2, 36, { align: "center" });
+      _doc.text(`DESA ${villageData.desa.toUpperCase()}`, pageWidth / 2 + 10, 36, { align: "center" });
+      _doc.setFontSize(10);
+      _doc.setFont("helvetica", "normal");
+      _doc.text(`Alamat: ${villageData.address}`, pageWidth / 2 + 10, 42, { align: "center" });
       
       _doc.setLineWidth(1);
-      _doc.line(20, 42, pageWidth - 20, 42);
+      _doc.line(20, 46, pageWidth - 20, 46);
       _doc.setLineWidth(0.5);
-      _doc.line(20, 44, pageWidth - 20, 44);
+      _doc.line(20, 48, pageWidth - 20, 48);
       
       // Title
       _doc.setFontSize(14);
@@ -225,7 +255,11 @@ export default function LetterSystem() {
       
       _doc.text("Nama", 30, 100); _doc.text(`: ${applicantData.name}`, 80, 100);
       _doc.text("NIK", 30, 108); _doc.text(`: ${applicantData.nik}`, 80, 108);
-      _doc.text("Tempat, Tgl Lahir", 30, 116); _doc.text(`: ${applicantData.birthPlace}, ${applicantData.birthDate}`, 80, 116);
+      _doc.text("Tempat, Tgl Lahir", 30, 116); 
+      const [year, month, day] = (applicantData.birthDate || '').split('-');
+      const formattedBirthDate = year ? `${day}/${month}/${year}` : applicantData.birthDate;
+      const birthInfo = applicantData.birthPlace ? `${applicantData.birthPlace}, ${formattedBirthDate}` : formattedBirthDate;
+      _doc.text(`: ${birthInfo}`, 80, 116);
       _doc.text("Jenis Kelamin", 30, 124); _doc.text(`: ${applicantData.gender}`, 80, 124);
       _doc.text("Pekerjaan", 30, 132); _doc.text(`: ${applicantData.occupation || '-'}`, 80, 132);
       
@@ -306,8 +340,8 @@ export default function LetterSystem() {
       
       _doc.save(`Surat-${letter.type}-${letter.trackingNumber}.pdf`);
     } catch(e) {
-      console.error(e);
-      alert('Gagal menghasilkan PDF');
+      console.error("DEBUG: PDF generation failed:", e);
+      alert('Gagal menghasilkan PDF: ' + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -390,8 +424,14 @@ export default function LetterSystem() {
         
         {!isOfficial && (
           <button 
-            onClick={() => setShowModal(true)}
-            className="flex items-center justify-center gap-3 h-14 px-8 gradient-primary text-white rounded-2xl font-bold shadow-xl shadow-indigo-100 hover:scale-105 transition-all"
+             onClick={() => {
+                if (!citizen || citizen.verificationStatus !== 'ADMIN_APPROVED') {
+                  alert('FITUR TERKUNCI: Anda harus melengkapi Data Warga dan menunggu verifikasi dari Desa sebelum dapat mengajukan surat.');
+                  return;
+                }
+                setShowModal(true);
+             }}
+             className={`flex items-center justify-center gap-3 h-14 px-8 ${(!citizen || citizen.verificationStatus !== 'ADMIN_APPROVED') ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'gradient-primary text-white hover:scale-105 shadow-xl shadow-indigo-100'} rounded-2xl font-bold transition-all`}
           >
             <Plus className="w-5 h-5 shadow-sm" />
             Ajukan Surat Baru

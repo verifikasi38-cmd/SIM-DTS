@@ -20,7 +20,7 @@ import {
   Camera
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, collection, getDocs, deleteDoc, addDoc, serverTimestamp, query, where, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, getDocs, deleteDoc, addDoc, serverTimestamp, query, where, getDoc, writeBatch } from 'firebase/firestore';
 import { SAMPLE_CITIZENS } from '../constants/seedData';
 import Papa from 'papaparse';
 import { CitizenData, VillageSettings } from '../types';
@@ -254,17 +254,70 @@ export default function ProfileView() {
     
     setResetting(true);
     try {
-      const collections = ['citizens', 'letters', 'complaints'];
+      const collections = ['citizens', 'letters', 'complaints', 'notifications'];
+      let totalDeleted = 0;
       for (const colName of collections) {
         const q = collection(db, colName);
         const snapshot = await getDocs(q);
-        const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+        const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref).then(() => totalDeleted++));
         await Promise.all(deletePromises);
       }
-      alert("Database dikosongkan.");
+      alert(`Database dikosongkan. Total ${totalDeleted} dokumen dihapus.`);
       window.location.reload();
     } catch (error) {
       alert("Gagal membersihkan data.");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || !profile) return;
+    if (!window.confirm("HAPUS AKUN TOTAL: Semua data Anda (keluarga, surat, pengaduan) akan dihapus permanen. Lanjutkan?")) return;
+    
+    setResetting(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Citizens (Self & Family)
+      const qCitizens = query(collection(db, 'citizens'), where('userId', '==', user.uid));
+      const snapCitizens = await getDocs(qCitizens);
+      snapCitizens.docs.forEach(d => batch.delete(d.ref));
+      
+      const MyNkk = profile.nkk || profile.kk;
+      if (MyNkk && MyNkk !== '-') {
+        const qFam = query(collection(db, 'citizens'), where('nkk', '==', MyNkk));
+        const snapFam = await getDocs(qFam);
+        snapFam.docs.forEach(d => {
+           if (!snapCitizens.docs.find(c => c.id === d.id)) batch.delete(d.ref);
+        });
+      }
+
+      // 2. Letters
+      const qLetters = query(collection(db, 'letters'), where('userId', '==', user.uid));
+      const snapLetters = await getDocs(qLetters);
+      snapLetters.docs.forEach(d => batch.delete(d.ref));
+
+      // 3. Complaints
+      const qComplaints = query(collection(db, 'complaints'), where('authorId', '==', user.uid));
+      const snapComplaints = await getDocs(qComplaints);
+      snapComplaints.docs.forEach(d => batch.delete(d.ref));
+
+      // 4. Notifications
+      const qNotif = query(collection(db, 'notifications'), where('userId', '==', user.uid));
+      const snapNotif = await getDocs(qNotif);
+      snapNotif.docs.forEach(d => batch.delete(d.ref));
+
+      // 5. User Doc
+      batch.delete(doc(db, 'users', user.uid));
+
+      await batch.commit();
+      await logout();
+      alert("Akun dan data Anda telah dihapus. Silakan mendaftar ulang.");
+      window.location.href = '/';
+    } catch (error) {
+      console.error("Delete account error:", error);
+      alert("Gagal menghapus akun. Pastikan Anda memiliki koneksi internet.");
     } finally {
       setResetting(false);
     }
@@ -462,7 +515,9 @@ export default function ProfileView() {
                   { label: 'Impor Data Warga dari CSV', icon: Upload, action: () => setShowImportModal(true), color: 'text-emerald-600', bg: 'bg-emerald-50' },
                   { label: 'Impor Data Dasar (Dummy)', icon: Database, action: handleSeedData, loading: seeding, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                   { label: 'Hapus Seluruh Data', icon: Trash2, action: handleResetData, loading: resetting, color: 'text-red-600', bg: 'bg-red-50' }
-                ] : [])
+                ] : [
+                  { label: 'Hapus Akun & Semua Data', icon: Trash2, action: handleDeleteAccount, loading: resetting, color: 'text-red-600', bg: 'bg-red-50' }
+                ])
               ].map((item, idx) => (
                 <button 
                   key={idx}

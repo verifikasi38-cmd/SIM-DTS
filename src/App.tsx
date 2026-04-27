@@ -9,6 +9,7 @@ import ComplaintSystem from './views/ComplaintSystem';
 import Statistics from './views/Statistics';
 import VerificationView from './views/VerificationView';
 import ProfileView from './views/ProfileView';
+import FamilyDataView from './views/FamilyDataView';
 
 import VillageSettingsView from './views/VillageSettingsView';
 import UserManagementView from './views/UserManagementView';
@@ -39,7 +40,9 @@ function AppContent() {
       case 'Dashboard':
         return <Dashboard setActiveTab={setActiveTab} />;
       case 'Data Warga':
-        return isOfficial ? <VerificationView /> : <CitizenDataForm />;
+        return isOfficial ? <VerificationView /> : <CitizenDataForm setActiveTab={setActiveTab} />;
+      case 'Keluarga':
+        return <FamilyDataView setActiveTab={setActiveTab} />;
       case 'Layanan Surat':
         return <LetterSystem />;
       case 'Pengaduan':

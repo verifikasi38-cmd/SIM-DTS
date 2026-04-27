@@ -38,6 +38,7 @@ interface Complaint {
 export default function ComplaintSystem() {
   const { user, profile } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [citizen, setCitizen] = useState<any>(null);
   // ... rest of state ...
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +61,10 @@ export default function ComplaintSystem() {
   useEffect(() => {
     if (!user) return;
 
+    const unsubCitizen = onSnapshot(query(collection(db, 'citizens'), where('userId', '==', user.uid), limit(1)), (snapshot) => {
+      if (!snapshot.empty) setCitizen({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+    });
+
     const q = query(
       collection(db, 'complaints'),
       where('authorId', '==', user.uid),
@@ -74,12 +79,17 @@ export default function ComplaintSystem() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => { unsubscribe(); unsubCitizen(); };
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !profile) return;
+    if (!citizen || citizen.verificationStatus !== 'ADMIN_APPROVED') {
+       alert('FITUR TERKUNCI: Anda harus melengkapi Data Warga dan menunggu verifikasi dari Desa sebelum dapat mengajukan laporan.');
+       return;
+    }
+
     setSubmitting(true);
     
     try {
@@ -221,10 +231,10 @@ export default function ComplaintSystem() {
 
                  <button 
                    type="submit"
-                   disabled={submitting}
-                   className="w-full h-14 gradient-primary text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl shadow-indigo-100 hover:opacity-90 disabled:opacity-50"
+                   disabled={submitting || !citizen || citizen.verificationStatus !== 'ADMIN_APPROVED'}
+                   className={`w-full h-14 ${(!citizen || citizen.verificationStatus !== 'ADMIN_APPROVED') ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'gradient-primary text-white hover:opacity-90 shadow-xl shadow-indigo-100'} rounded-2xl font-bold flex items-center justify-center gap-3 disabled:opacity-50 transition-all`}
                  >
-                    {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> Kirim Pengaduan</>}
+                    {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> {(!citizen || citizen.verificationStatus !== 'ADMIN_APPROVED') ? 'Akun Belum Verifikasi' : 'Kirim Pengaduan'}</>}
                  </button>
               </form>
            </motion.div>

@@ -22,6 +22,9 @@ import {
   Building2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import NotificationDropdown from './NotificationDropdown';
+import { db } from '../lib/firebase';
+import { query, collection, where, limit, onSnapshot } from 'firebase/firestore';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,18 +35,67 @@ interface LayoutProps {
 export default function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
   const { user, profile, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved !== null) {
+        if (saved === 'true') {
+           document.documentElement.classList.add('dark');
+           return true;
+        } else {
+           document.documentElement.classList.remove('dark');
+           return false;
+        }
+      }
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+  const [citizenVerification, setCitizenVerification] = useState<string | null>(null);
+  const [hasCitizenData, setHasCitizenData] = useState<boolean>(true); // Assume true then check
+  const [loadingCitizen, setLoadingCitizen] = useState(true);
+
+  React.useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [isDarkMode]);
+
+  React.useEffect(() => {
+    if (user && profile?.role === 'CITIZEN') {
+       const q = query(collection(db, 'citizens'), where('userId', '==', user.uid), limit(1));
+       const unsub = onSnapshot(q, (snap) => {
+          if (!snap.empty) {
+             setHasCitizenData(true);
+             setCitizenVerification(snap.docs[0].data().verificationStatus);
+          } else {
+             setHasCitizenData(false);
+             setCitizenVerification(null);
+          }
+          setLoadingCitizen(false);
+       });
+       return () => unsub();
+    } else {
+       setCitizenVerification(null);
+       setHasCitizenData(true);
+       setLoadingCitizen(false);
+    }
+  }, [user, profile]);
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
   };
 
   if (!user) return <>{children}</>;
 
   const navigation = [
     { name: 'Dashboard', icon: Home, roles: ['CITIZEN', 'RT', 'RW', 'KADUS', 'ADMIN'], category: 'Utama' },
-    { name: profile?.role === 'CITIZEN' ? 'Rekam Data' : 'Data Warga', icon: Users, roles: ['CITIZEN', 'RT', 'RW', 'KADUS', 'ADMIN'], category: 'Administrasi', originalName: 'Data Warga' },
+    { name: 'Data Warga', icon: Users, roles: ['CITIZEN', 'RT', 'RW', 'KADUS', 'ADMIN'], category: 'Administrasi' },
+    { name: 'Keluarga', icon: Users, roles: ['CITIZEN'], category: 'Administrasi' },
     { name: 'Layanan Surat', icon: FileText, roles: ['CITIZEN', 'RT', 'RW', 'ADMIN'], category: 'Layanan' },
     { name: 'Pengaduan', icon: MessageSquare, roles: ['CITIZEN', 'RT', 'RW', 'KADUS', 'ADMIN'], category: 'Layanan' },
     { name: 'Statistik', icon: BarChart3, roles: ['RT', 'RW', 'KADUS', 'ADMIN'], category: 'Analitik' },
@@ -110,24 +162,24 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
                   <button
                     key={item.name}
                     onClick={() => {
-                      setActiveTab(item.originalName || item.name);
+                      setActiveTab(item.name);
                       setIsSidebarOpen(false);
                     }}
                     className={`w-full flex items-center justify-between group px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                      (activeTab === item.name || activeTab === item.originalName)
+                      activeTab === item.name
                       ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100' 
                       : 'text-slate-500 hover:bg-slate-50 hover:text-indigo-600'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <item.icon className={`w-5 h-5 transition-colors ${
-                        (activeTab === item.name || activeTab === item.originalName) ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'
+                        activeTab === item.name ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'
                       }`} />
-                      <span className={`text-[13.5px] font-bold ${(activeTab === item.name || activeTab === item.originalName) ? 'text-indigo-700' : 'text-slate-600'}`}>
+                      <span className={`text-[13.5px] font-bold ${activeTab === item.name ? 'text-indigo-700' : 'text-slate-600'}`}>
                         {item.name}
                       </span>
                     </div>
-                    {(activeTab === item.name || activeTab === item.originalName) && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 shadow-lg shadow-indigo-400"></div>}
+                    {activeTab === item.name && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 shadow-lg shadow-indigo-400"></div>}
                   </button>
                 ))}
               </div>
@@ -205,10 +257,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
                     
-              <button className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all relative">
-                 <Bell className="w-5 h-5" />
-                 <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-indigo-600 rounded-full border-2 border-white"></span>
-              </button>
+              <NotificationDropdown />
 
               <button 
                 onClick={logout}
@@ -221,13 +270,13 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
               <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block"></div>
               
               <div className="hidden sm:flex items-center gap-3">
-                 {profile?.isVerified ? (
+                 {(profile?.role !== 'CITIZEN' || citizenVerification === 'ADMIN_APPROVED') ? (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
                        <CheckCircle2 className="w-3.5 h-3.5" /> Terverifikasi
                     </div>
                  ) : (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-widest border border-amber-100">
-                       <AlertCircle className="w-3.5 h-3.5" /> Pending
+                       <AlertCircle className="w-3.5 h-3.5" /> {citizenVerification ? 'PROSES VERIFIKASI' : 'PENDING'}
                     </div>
                  )}
               </div>
@@ -236,6 +285,25 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 
         {/* Dynamic Page Content */}
         <main className="flex-1 p-6 lg:p-10 max-w-[1600px] w-full mx-auto">
+          {!loadingCitizen && profile?.role === 'CITIZEN' && !hasCitizenData && (
+             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
+               <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center shrink-0">
+                 <AlertCircle className="w-5 h-5" />
+               </div>
+               <div>
+                  <h3 className="text-sm font-extrabold text-amber-900">Data Warga Belum Lengkap</h3>
+                  <p className="text-xs text-amber-800 font-medium mb-2">
+                     Silakan lengkapi data warga untuk mengakses layanan.
+                  </p>
+                  <button 
+                     onClick={() => setActiveTab('Data Warga')}
+                     className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-lg font-bold transition-all text-[10px]"
+                  >
+                     Lengkapi Sekarang
+                  </button>
+               </div>
+             </div>
+          )}
           {children}
         </main>
       </div>
@@ -244,15 +312,15 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 flex items-center justify-around z-50 rounded-t-3xl shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
         {[
           { name: 'Dashboard', icon: Home },
-          { name: profile?.role === 'CITIZEN' ? 'Rekam Data' : 'Data Warga', icon: Users, originalName: 'Data Warga' },
+          { name: profile?.role === 'CITIZEN' ? 'Keluarga' : 'Data Warga', icon: Users },
           { name: 'Layanan Surat', icon: FileText },
           { name: 'Profil', icon: User }
         ].map(item => (
           <button
             key={item.name}
-            onClick={() => setActiveTab(item.originalName || item.name)}
+            onClick={() => setActiveTab(item.name)}
             className={`flex flex-col items-center gap-1 transition-all ${
-              (activeTab === item.name || activeTab === item.originalName) ? 'text-indigo-600 scale-110' : 'text-slate-400 hover:text-slate-600'
+              activeTab === item.name ? 'text-indigo-600 scale-110' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <item.icon className="w-6 h-6" />
