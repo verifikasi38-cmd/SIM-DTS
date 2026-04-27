@@ -5,9 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { NotificationService } from '../services/NotificationService';
 import { AppNotification } from '../types';
 
-export default function NotificationDropdown() {
+export default function NotificationDropdown({ onNotification }: { onNotification?: () => void }) {
   const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const prevNotificationsRef = React.useRef<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -16,26 +17,29 @@ export default function NotificationDropdown() {
 
     let unsubscribe = () => {};
 
+    const callback = (data: AppNotification[]) => {
+        if (data.length > prevNotificationsRef.current.length) {
+          onNotification && onNotification();
+        }
+        prevNotificationsRef.current = data;
+        setNotifications(data);
+        setUnreadCount(data.filter(n => !n.read).length);
+    };
+
     // For officials, listen by role and area
     if (['RT', 'RW', 'KADUS', 'ADMIN'].includes(profile.role)) {
       unsubscribe = NotificationService.listenRoleNotifications(
         profile.role,
         { rt: profile.rt, rw: profile.rw, dusun: profile.dusun },
-        (data) => {
-          setNotifications(data);
-          setUnreadCount(data.filter(n => !n.read).length);
-        }
+        callback
       );
     } else {
       // For citizens, listen by userId
-      unsubscribe = NotificationService.listenUserNotifications(user.uid, (data) => {
-        setNotifications(data);
-        setUnreadCount(data.filter(n => !n.read).length);
-      });
+      unsubscribe = NotificationService.listenUserNotifications(user.uid, callback);
     }
 
     return () => unsubscribe();
-  }, [user, profile]);
+  }, [user, profile, onNotification]);
 
   const handleMarkRead = async (id: string) => {
     await NotificationService.markAsRead(id);

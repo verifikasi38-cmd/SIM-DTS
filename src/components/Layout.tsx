@@ -32,6 +32,24 @@ interface LayoutProps {
   setActiveTab: (tab: string) => void;
 }
 
+const playNotificationSound = () => {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4
+  
+  gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.5);
+
+  oscillator.start();
+  oscillator.stop(audioContext.currentTime + 0.5);
+};
+
 export default function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
   const { user, profile, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -257,7 +275,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
                     
-              <NotificationDropdown />
+              <NotificationDropdown onNotification={playNotificationSound} />
 
               <button 
                 onClick={logout}

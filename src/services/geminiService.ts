@@ -1,4 +1,5 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { arrayBufferToBase64 } from "../lib/imageUtils";
 
 let aiClient: GoogleGenAI | null = null;
 function getAi(): GoogleGenAI {
@@ -12,16 +13,6 @@ function getAi(): GoogleGenAI {
     aiClient = new GoogleGenAI({ apiKey: key || 'dummy-key' });
   }
   return aiClient;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
 }
 
 export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string) {
@@ -44,6 +35,7 @@ export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string)
     Be as accurate as possible. Only return the JSON.
   `;
 
+  // Use the safer arrayBufferToBase64 from imageUtils
   const base64Content = arrayBufferToBase64(imageBuffer);
 
   const imagePart = {
@@ -55,7 +47,7 @@ export async function extractKtpData(imageBuffer: ArrayBuffer, mimeType: string)
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [
         {
           parts: [

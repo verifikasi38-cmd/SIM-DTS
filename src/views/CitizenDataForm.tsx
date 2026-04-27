@@ -264,7 +264,6 @@ export default function CitizenDataForm({ setActiveTab }: { setActiveTab?: (tab:
                 className="hidden" 
                 ref={fileInputRef} 
                 accept="image/*"
-                capture="environment"
                 onChange={handleKtpScan}
               />
               

@@ -2,6 +2,7 @@
   "name": "SIM-DTS Tarempa Selatan",
   "short_name": "SIM-DTS",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
