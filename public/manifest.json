@@ -2,7 +2,7 @@
   "name": "Aplikasi Pelayanan Desa",
   "short_name": "SistemDesa",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [

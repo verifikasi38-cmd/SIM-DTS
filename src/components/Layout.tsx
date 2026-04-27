@@ -13,6 +13,8 @@ import {
   Menu,
   X,
   Bell,
+  Moon,
+  Sun,
   Search,
   ChevronRight,
   ShieldCheck,
@@ -30,6 +32,12 @@ interface LayoutProps {
 export default function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
   const { user, profile, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    document.documentElement.classList.toggle('dark');
+  };
 
   if (!user) return <>{children}</>;
 
@@ -56,7 +64,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 flex">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -72,7 +80,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 
       {/* Sidebar - Desktop & Tablet */}
       <aside 
-        className={`fixed lg:sticky top-0 h-screen z-50 bg-white border-r border-slate-200 transition-all duration-300 w-72 flex flex-col ${
+        className={`fixed lg:sticky top-0 h-screen z-50 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 w-72 flex flex-col ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -163,7 +171,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 
       {/* Content Side Container */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-40">
+        <header className="h-20 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-40">
            {/* Mobile Menu & Brand */}
            <div className="flex items-center gap-4">
               <button 
@@ -190,9 +198,24 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
                  <input type="text" placeholder="Cari layanan atau data..." className="bg-transparent border-none outline-none text-sm font-medium ml-3 w-full" />
               </div>
               
+              <button 
+                 onClick={toggleDarkMode}
+                 className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all"
+              >
+                 {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+                    
               <button className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all relative">
                  <Bell className="w-5 h-5" />
                  <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-indigo-600 rounded-full border-2 border-white"></span>
+              </button>
+
+              <button 
+                onClick={logout}
+                className="p-2.5 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all"
+                title="Keluar"
+              >
+                 <LogOut className="w-5 h-5" />
               </button>
 
               <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block"></div>
@@ -218,7 +241,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       </div>
 
       {/* Mobile Bottom Navigation (Smart Tab) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-slate-200 px-6 flex items-center justify-around z-50 rounded-t-3xl shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 flex items-center justify-around z-50 rounded-t-3xl shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
         {[
           { name: 'Dashboard', icon: Home },
           { name: profile?.role === 'CITIZEN' ? 'Rekam Data' : 'Data Warga', icon: Users, originalName: 'Data Warga' },

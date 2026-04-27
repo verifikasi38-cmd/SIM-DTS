@@ -157,34 +157,35 @@ export default function CitizenDataForm() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="p-12 text-center"
+              className="p-6 sm:p-12 text-center"
             >
-              <div className="relative w-72 h-44 mx-auto mb-10 group overflow-hidden">
-                 <div className="absolute inset-0 border-2 border-dashed border-indigo-200 rounded-3xl group-hover:border-indigo-400 transition-all"></div>
+              <div className="relative w-full max-w-[280px] h-[160px] mx-auto mb-8 group overflow-hidden bg-slate-100 rounded-3xl border border-indigo-100 shadow-inner">
+                 {/* Scanner Background Decoration */}
+                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-50/50 to-transparent"></div>
                  
                  {scanning ? (
-                    <div className="absolute inset-0 bg-indigo-50/50 flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 bg-indigo-50/80 backdrop-blur-sm flex flex-col items-center justify-center">
                        <motion.div 
                          initial={{ top: 0 }}
                          animate={{ top: '100%' }}
                          transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                         className="absolute left-0 w-full h-[2px] bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.8)] z-10"
+                         className="absolute left-0 w-full h-[3px] bg-indigo-500 shadow-[0_0_20px_rgba(79,70,229,0.8)] z-10"
                        />
                        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
-                       <p className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-widest">Memindai KTP...</p>
+                       <p className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-widest bg-white/50 px-3 py-1 rounded-full">Memindai KTP...</p>
                     </div>
                  ) : (
-                    <div className="absolute inset-4 bg-slate-50 rounded-2xl flex flex-col items-center justify-center text-slate-400">
-                       <Scan className="w-10 h-10 mb-2" />
-                       <p className="text-xs font-bold uppercase tracking-widest">AI Scanner Area</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                       <Scan className="w-12 h-12 mb-3 opacity-50" />
+                       <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">AI KTP SCANNER</p>
                     </div>
                  )}
 
-                 {/* Corner decorations */}
-                 <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-indigo-600 rounded-tl-xl"></div>
-                 <div className="absolute top-0 right-0 w-6 h-6 border-r-4 border-t-4 border-indigo-600 rounded-tr-xl"></div>
-                 <div className="absolute bottom-0 left-0 w-6 h-6 border-l-4 border-b-4 border-indigo-600 rounded-bl-xl"></div>
-                 <div className="absolute bottom-0 right-0 w-6 h-6 border-r-4 border-b-4 border-indigo-600 rounded-br-xl"></div>
+                 {/* Refined Corner decorations */}
+                 <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-indigo-400 rounded-tl-3xl"></div>
+                 <div className="absolute top-0 right-0 w-8 h-8 border-r-2 border-t-2 border-indigo-400 rounded-tr-3xl"></div>
+                 <div className="absolute bottom-0 left-0 w-8 h-8 border-l-2 border-b-2 border-indigo-400 rounded-bl-3xl"></div>
+                 <div className="absolute bottom-0 right-0 w-8 h-8 border-r-2 border-b-2 border-indigo-400 rounded-br-3xl"></div>
               </div>
 
               <h3 className="text-2xl font-extrabold text-slate-900 mb-3 tracking-tight">Percepat Data Anda</h3>

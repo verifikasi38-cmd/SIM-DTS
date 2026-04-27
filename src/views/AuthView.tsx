@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -13,13 +13,25 @@ import {
   Globe,
   Info,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  Smartphone,
+  Download,
+  HelpCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import AboutView from './AboutView';
+import HelpView from './HelpView';
+import InstallView from './InstallView';
+import SplashView from './SplashView';
 
 export default function AuthView() {
+  const [activeAuthView, setActiveAuthView] = useState<'login' | 'about' | 'help' | 'install'>('login');
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splashShown'));
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,6 +56,25 @@ export default function AuthView() {
       setLoading(false);
     }
   };
+
+  if(showSplash) {
+      return <SplashView onComplete={() => {
+        sessionStorage.setItem('splashShown', 'true');
+        setShowSplash(false);
+      }} />;
+  }
+
+  if (activeAuthView === 'about') {
+    return <AboutView onBack={() => setActiveAuthView('login')} />;
+  }
+  
+  if (activeAuthView === 'help') {
+    return <HelpView onBack={() => setActiveAuthView('login')} />;
+  }
+
+  if (activeAuthView === 'install') {
+    return <InstallView onBack={() => setActiveAuthView('login')} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row overflow-hidden">
@@ -120,7 +151,7 @@ export default function AuthView() {
           animate={{ opacity: 1, scale: 1 }}
           className="w-full max-w-md"
         >
-          <div className="lg:hidden flex items-center gap-3 mb-10">
+          <div className="lg:hidden flex items-center gap-3 mb-10 mt-6">
              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-100 flex-shrink-0">
                 <img src="https://cdn.phototourl.com/free/2026-04-26-e061c39c-4482-4062-9346-6450b90a83a7.png" alt="Logo" className="w-full h-full object-cover" />
              </div>
@@ -198,13 +229,20 @@ export default function AuthView() {
                   <Lock className="w-5 h-5 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full h-11 pl-11 pr-12 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-600"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 
@@ -268,6 +306,31 @@ export default function AuthView() {
              </p>
           </footer>
         </motion.div>
+      </div>
+
+      {/* Auth Bottom Navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-slate-200 px-6 flex items-center justify-around z-50 rounded-t-3xl shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+        <button 
+          onClick={() => setActiveAuthView('about')}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-indigo-600 transition-colors"
+        >
+          <Info className="w-6 h-6" />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Tentang</span>
+        </button>
+        <button 
+          onClick={() => setActiveAuthView('help')}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-indigo-600 transition-colors"
+        >
+          <HelpCircle className="w-6 h-6" />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Bantuan</span>
+        </button>
+        <button 
+          onClick={() => setActiveAuthView('install')}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-indigo-600 transition-colors"
+        >
+          <Smartphone className="w-6 h-6" />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Cara Instal</span>
+        </button>
       </div>
     </div>
   );
